@@ -36,7 +36,20 @@ def _send_html_email(to_email: str, subject: str, html_body: str):
 
 def send_email_otp(email: str, subject: str, otp: str, expiry_minutes: int = 5):
     html_body = f"""
-   {otp}
+    <html>
+    <body style="font-family: Arial, sans-serif; background-color: #333; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: #333; padding: 30px; border-radius: 8px; border: 4px solid goldenrod;">
+            <h2 style="color: goldenrod; text-align: center;">Marmu Barber & Tattoo Shop</h2>
+            <p style="font-size: 16px; color: #fff;">Use the following OTP to proceed:</p>
+            <div style="text-align: center; margin: 30px 0;">
+                <span style="font-size: 32px; font-weight: bold; color: #ffffff; background-color: #333; padding: 15px 25px; border-radius: 4px; border: 2px solid goldenrod; letter-spacing: 5px;">
+                    {otp}
+                </span>
+            </div>
+            <p style="font-size: 14px; color: #ddd;">This code is valid for <strong>{expiry_minutes} minutes</strong>.</p>
+        </div>
+    </body>
+    </html>
     """
     _send_html_email(email, subject, html_body)
 
