@@ -1,6 +1,6 @@
 # /routes/admin.py
 from flask import Blueprint, request, jsonify
-from backend.db import get_mongo_db  # Assume this returns a PyMongo database instance
+from backend.db import get_db  # Assume this returns a PyMongo database instance
 from backend.utils.security import hash_password
 from backend.utils.email_utils import send_appointment_status_email, send_feedback_reply_email
 from bson import ObjectId
@@ -13,7 +13,7 @@ admin_bp = Blueprint("admin", __name__)
 # -----------------------------
 @admin_bp.route("/dashboard-data", methods=["GET"])
 def admin_dashboard_data():
-    db = get_mongo_db()
+    db = get_db()
     
     total_clients = db.tbl_clients.count_documents({})
     pending = db.tbl_appointments.count_documents({"status": "Pending"})
@@ -41,7 +41,7 @@ def admin_dashboard_data():
 # -----------------------------
 @admin_bp.route("/appointments/summary", methods=["GET"])
 def appointments_summary():
-    db = get_mongo_db()
+    db = get_db()
     
     pipeline = [
         {"$group": {
@@ -61,7 +61,7 @@ def appointments_summary():
 # -----------------------------
 @admin_bp.route("/appointments/monthly-report", methods=["GET"])
 def monthly_report():
-    db = get_mongo_db()
+    db = get_db()
     now = datetime.now()
     
     pipeline = [
@@ -84,7 +84,7 @@ def monthly_report():
 # -----------------------------
 @admin_bp.route("/users", methods=["GET"])
 def get_users():
-    db = get_mongo_db()
+    db = get_db()
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 20))
     sort = request.args.get("sort", "name")
@@ -146,7 +146,7 @@ def add_user():
     if not all([fullname, username, email, password, role]):
         return jsonify({"error": "Missing required fields"}), 400
     
-    db = get_mongo_db()
+    db = get_db()
     hashed_password = hash_password(password)
     account_id = db.tbl_accounts.insert_one({
         "username": username,
@@ -169,7 +169,7 @@ def add_user():
 # -----------------------------
 @admin_bp.route("/appointments", methods=["GET"])
 def get_appointments():
-    db = get_mongo_db()
+    db = get_db()
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 20))
     q = request.args.get('q')
@@ -223,7 +223,7 @@ def update_appointment(appointment_id):
     if not new_status:
         return jsonify({"error": "Missing status field"}), 400
     
-    db = get_mongo_db()
+    db = get_db()
     appointment = db.tbl_appointments.find_one_and_update(
         {"_id": ObjectId(appointment_id)},
         {"$set": {"status": new_status}},
@@ -251,7 +251,7 @@ def update_appointment(appointment_id):
 # -----------------------------
 @admin_bp.route("/feedback", methods=["GET"])
 def get_feedback_admin():
-    db = get_mongo_db()
+    db = get_db()
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 50))
     status = request.args.get('status')
@@ -292,7 +292,7 @@ def admin_reply_feedback(feedback_id):
     if not reply:
         return jsonify({"message": "Reply cannot be empty."}), 400
     
-    db = get_mongo_db()
+    db = get_db()
     feedback = db.tbl_feedback.find_one_and_update(
         {"_id": ObjectId(feedback_id)},
         {"$set": {"reply": reply, "resolved": True}},
@@ -319,7 +319,7 @@ def toggle_feedback_resolved(feedback_id):
     data = request.get_json()
     resolved_status = bool(data.get("resolved", False))
     
-    db = get_mongo_db()
+    db = get_db()
     result = db.tbl_feedback.update_one({"_id": ObjectId(feedback_id)}, {"$set": {"resolved": resolved_status}})
     
     if result.matched_count == 0:
