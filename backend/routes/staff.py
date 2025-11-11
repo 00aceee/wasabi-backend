@@ -1,14 +1,11 @@
 from flask import Blueprint, request, jsonify
-from pymongo import MongoClient
 from bson.objectid import ObjectId
-import os
+from backend.db import get_db
 
 staff_bp = Blueprint("staff", __name__)
 
-# ---------------- MONGODB CONNECTION ---------------- #
-MONGO_URI = os.getenv("MONGO_URI", "your_mongodb_atlas_connection_string")
-client = MongoClient(MONGO_URI)
-db = client["your_database_name"]  # Replace with your DB name
+# ---------------- COLLECTIONS ---------------- #
+db = get_db()
 accounts_col = db["accounts"]
 staff_col = db["staff"]
 unavailability_col = db["staff_unavailability"]
@@ -26,15 +23,25 @@ def add_unavailability():
         return jsonify({"error": "Missing required fields"}), 400
 
     try:
+        # Convert staff_id to ObjectId if it's a string
+        try:
+            staff_obj_id = ObjectId(staff_id)
+        except Exception:
+            return jsonify({"error": "Invalid staff_id"}), 400
+
         # Remove existing entries for that date
-        unavailability_col.delete_many({"staff_id": staff_id, "unavailable_date": unavailable_date})
+        unavailability_col.delete_many({
+            "staff_id": staff_obj_id,
+            "unavailable_date": unavailable_date
+        })
 
         # Insert new unavailable times
         documents = [
-            {"staff_id": staff_id, "unavailable_date": unavailable_date, "unavailable_time": t}
+            {"staff_id": staff_obj_id, "unavailable_date": unavailable_date, "unavailable_time": t}
             for t in unavailable_times
         ]
-        unavailability_col.insert_many(documents)
+        if documents:
+            unavailability_col.insert_many(documents)
 
         return jsonify({"message": "Unavailability saved successfully"}), 201
     except Exception as e:
@@ -52,10 +59,8 @@ def get_staff_by_service(service):
         return jsonify([]), 200
 
     try:
-        staff_list = list(
-            staff_col.find({"role": role, "specialization": role}, {"_id": 1, "fullname": 1})
-        )
-        # Convert ObjectId to string for JSON
+        staff_list = list(staff_col.find({"role": role}, {"fullname": 1}))
+        # Convert ObjectId to string
         for staff in staff_list:
             staff["id"] = str(staff["_id"])
             del staff["_id"]
@@ -82,7 +87,7 @@ def get_staff_unavailability_list():
             {
                 "$project": {
                     "_id": 0,
-                    "staff_id": 1,
+                    "staff_id": {"$toString": "$staff_id"},
                     "unavailable_date": 1,
                     "unavailable_time": 1,
                     "staff_name": "$staff_info.fullname"

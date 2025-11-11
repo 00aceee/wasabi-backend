@@ -11,5 +11,5 @@ if not mongo_uri:
 client = MongoClient(mongo_uri)
 db = client["marmudb"]
 
-def get_connection():
+def get_db():
     return db
