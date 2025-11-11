@@ -5,12 +5,12 @@ from flask_cors import CORS
 from backend.routes import auth_bp, bookings_bp, feedback_bp, admin_bp, staff_bp, services_bp
 
 app = Flask(__name__)
-CORS(app, origins=["https://your-netlify-site.netlify.app"], supports_credentials=True)
+CORS(app, origins=["https://marmuappointmentsystem.netlify.app/"], supports_credentials=True)
 app.secret_key = "supersecretkey" 
 
 @app.route('/assets/<path:filename>')
 def serve_assets(filename):
-    return send_from_directory('../marmu-react/public/assets', filename)
+    return send_from_directory('../backend/public/assets', filename)
 
 # Register blueprints with clear prefixes
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
