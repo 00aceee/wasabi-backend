@@ -6,8 +6,31 @@ from backend.routes import auth_bp, bookings_bp, feedback_bp, admin_bp, staff_bp
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://marmuappointmentsystem.netlify.app"}}, supports_credentials=True)
-app.secret_key = "supersecretkey" 
+
+# CORS: allow production frontend and common local dev origins
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": [
+                "https://marmuappointmentsystem.netlify.app",
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000",
+            ]
+        }
+    },
+    supports_credentials=True,
+)
+
+app.secret_key = "supersecretkey"
+
+# Cross-site cookie settings for sessions (Netlify -> Render)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 @app.route('/assets/<path:filename>')
