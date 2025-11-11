@@ -1,5 +1,16 @@
-import mysql.connector
-from backend.db_config import DB_CONFIG
+from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
 
-def get_connection():
-    return mysql.connector.connect(**DB_CONFIG)
+# Load environment variables from .env
+load_dotenv()
+
+mongo_uri = os.getenv("MONGO_URI")
+if not mongo_uri:
+    raise ValueError("MONGO_URI environment variable is not set!")
+
+client = MongoClient(mongo_uri)
+db = client["marmudb"]
+
+def get_db():
+    return db

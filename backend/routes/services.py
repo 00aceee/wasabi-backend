@@ -6,24 +6,34 @@ services_bp = Blueprint("services", __name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REACT_PUBLIC_PATH = os.path.join(BASE_DIR, "../../backend/public/assets")
 
-@services_bp.route('/assets/<path:filename>')
+
+# ---------------- SERVE STATIC ASSETS ---------------- #
+@services_bp.route("/assets/<path:filename>")
 def serve_assets(filename):
+    """
+    Serve static files from the public/assets folder.
+    """
     return send_from_directory(REACT_PUBLIC_PATH, filename)
 
+
+# ---------------- GET SERVICE IMAGES ---------------- #
 @services_bp.route("/images", methods=["GET"])
 def get_service_images():
+    """
+    Return all tattoo and haircut images with their URLs and formatted names.
+    """
     tattoo_folder = os.path.join(REACT_PUBLIC_PATH, "tattoo_images")
     haircut_folder = os.path.join(REACT_PUBLIC_PATH, "haircut_images")
 
-    def get_images(folder, service_type):
+    def get_images(folder_path, service_type):
         images = []
-        if not os.path.exists(folder):
-            return []
-        for filename in os.listdir(folder):
+        if not os.path.exists(folder_path):
+            return images
+        for filename in os.listdir(folder_path):
             if filename.lower().endswith(".png"):
                 name = os.path.splitext(filename)[0].replace("_", " ").replace("-", " ").title()
-                # Use request.host_url instead of localhost
-                image_url = f"{request.host_url}api/services/assets/{service_type}_images/{filename}"
+                # Use request.host_url for dynamic host URL
+                image_url = f"{request.host_url.rstrip('/')}/api/services/assets/{service_type}_images/{filename}"
                 images.append({"name": name, "image": image_url})
         return sorted(images, key=lambda x: x["name"])
 

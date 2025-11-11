@@ -1,14 +1,25 @@
+# /utils/email_utils.py
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
 from dotenv import load_dotenv
+from backend.db import db
+from datetime import datetime
 
 load_dotenv()
 YOUR_GMAIL = os.getenv("GMAIL_ADDRESS")
 YOUR_APP_PASSWORD = os.getenv("GMAIL_APP")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
+
+def log_email(to_email, subject, html_body):
+    db.emails.insert_one({
+        "to_email": to_email,
+        "subject": subject,
+        "body": html_body,
+        "sent_at": datetime.utcnow()
+    })
 
 def _send_html_email(to_email: str, subject: str, html_body: str):
     msg = MIMEMultipart("alternative")

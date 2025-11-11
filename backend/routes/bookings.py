@@ -1,10 +1,13 @@
+# /routes/bookings.py
 from flask import Blueprint, request, jsonify, session
-from datetime import datetime
-from backend.db import get_connection
+from datetime import datetime, timedelta
+from backend.db import get_db
 from backend.utils.email_utils import send_appointment_status_email
+from bson import ObjectId
 
 bookings_bp = Blueprint("bookings", __name__)
 
+# ---------------- CREATE BOOKING ---------------- #
 @bookings_bp.route("", methods=["POST"])
 def create_booking():
     data = request.get_json()
@@ -21,163 +24,151 @@ def create_booking():
     staff_id = data["staff_id"]
     remarks = data.get("remarks", "")
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT c.id FROM tbl_clients c JOIN tbl_accounts a ON c.account_id=a.id WHERE a.username=%s", (username,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({"error": "User not found"}), 404
+    db = get_db()
 
-        cursor.execute("SELECT s.fullname FROM tbl_staff s WHERE s.id=%s", (staff_id,))
-        artist = cursor.fetchone()
-        if not artist:
-            return jsonify({"error": "Artist not found"}), 404
-        artist_name = artist[0]
+    # Find client and staff
+    account = db.accounts.find_one({"username": username})
+    if not account:
+        return jsonify({"error": "User not found"}), 404
 
-        cursor.execute("""
-            SELECT id FROM tbl_appointment
-            WHERE appointment_date=%s AND time=%s AND artist_id=%s AND status!='Cancelled'
-        """, (date, time, staff_id))
-        if cursor.fetchone():
-            return jsonify({"error": "This time slot is already booked"}), 409
+    client = db.clients.find_one({"account_id": account["_id"]})
+    if not client:
+        return jsonify({"error": "Client profile not found"}), 404
 
-        try:
-            cursor.execute("""
-                SELECT COUNT(*) FROM tbl_appointment
-                WHERE user_id=%s AND service=%s AND appointment_date>=DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND status!='Cancelled'
-            """, (user[0], service))
-            recent_count = cursor.fetchone()[0]
-            if recent_count and recent_count >= 1:
-                return jsonify({"error": f"You can only book one {service} every 2 weeks."}), 400
-        except Exception:
-            pass
+    staff = db.staff.find_one({"_id": ObjectId(staff_id)})
+    if not staff:
+        return jsonify({"error": "Artist not found"}), 404
+    artist_name = staff["fullname"]
 
-        cursor.execute("""
-            INSERT INTO tbl_appointment
-                (user_id, fullname, service, appointment_date, time, remarks, status, artist_id, artist_name)
-            VALUES (%s, %s, %s, %s, %s, %s, 'Pending', %s, %s)
-        """, (user[0], fullname, service, date, time, remarks, staff_id, artist_name))
+    # Check if slot already booked
+    existing = db.appointments.find_one({
+        "appointment_date": date,
+        "time": time,
+        "artist_id": staff["_id"],
+        "status": {"$ne": "Cancelled"}
+    })
+    if existing:
+        return jsonify({"error": "This time slot is already booked"}), 409
 
-        cursor.execute("""
-            UPDATE tbl_staff_unavailability
-            SET is_booked=TRUE
-            WHERE staff_id=%s AND unavailable_date=%s AND unavailable_time=%s
-        """, (staff_id, date, time))
+    # Prevent overbooking within 2 weeks
+    two_weeks_ago = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
+    recent = db.appointments.count_documents({
+        "user_id": client["_id"],
+        "service": service,
+        "appointment_date": {"$gte": two_weeks_ago},
+        "status": {"$ne": "Cancelled"}
+    })
+    if recent >= 1:
+        return jsonify({"error": f"You can only book one {service} every 2 weeks."}), 400
 
-        conn.commit()
-        return jsonify({"message": "Booking created successfully!", "status": "Pending"}), 201
-    except Exception as e:
-        print("Error creating booking:", e)
-        return jsonify({"error": "An error occurred while processing your request."}), 500
-    finally:
-        conn.close()
+    # Create booking
+    appointment = {
+        "user_id": client["_id"],
+        "fullname": fullname,
+        "service": service,
+        "appointment_date": date,
+        "time": time,
+        "remarks": remarks,
+        "status": "Pending",
+        "artist_id": staff["_id"],
+        "artist_name": artist_name,
+        "created_at": datetime.now()
+    }
+    db.appointments.insert_one(appointment)
+
+    # Mark slot as booked
+    db.staff_unavailability.update_one(
+        {"staff_id": staff["_id"], "unavailable_date": date, "unavailable_time": time},
+        {"$set": {"is_booked": True}},
+        upsert=True
+    )
+
+    return jsonify({"message": "Booking created successfully!", "status": "Pending"}), 201
 
 
+# ---------------- GET USER APPOINTMENTS ---------------- #
 @bookings_bp.route("/user/<username>", methods=["GET"])
 def get_user_appointments(username):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT a.id AS account_id, c.id AS client_id
-            FROM tbl_accounts a
-            JOIN tbl_clients c ON c.account_id=a.id
-            WHERE a.username=%s
-        """, (username,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({"error": "User not found"}), 404
+    db = get_db()
 
-        cursor.execute("""
-            SELECT id, fullname, service, appointment_date, time, remarks,
-                    status, artist_name FROM tbl_appointment
-            WHERE user_id=%s
-            ORDER BY appointment_date DESC, time DESC
-        """, (user["client_id"],))
-        appointments = cursor.fetchall()
+    account = db.accounts.find_one({"username": username})
+    if not account:
+        return jsonify({"error": "User not found"}), 404
 
-        for apt in appointments:
-            t = apt.get("time")
-            if t:
-                try:
-                    try:
-                        parsed = datetime.strptime(t.strip(), "%H:%M")
-                    except ValueError:
-                        parsed = datetime.strptime(t.strip(), "%I:%M %p")
-                    apt["time"] = parsed.strftime("%I:%M %p")
-                except Exception:
-                    apt["time"] = t  
+    client = db.clients.find_one({"account_id": account["_id"]})
+    if not client:
+        return jsonify({"error": "Client profile not found"}), 404
 
-        return jsonify(appointments), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        conn.close()
+    appointments = list(db.appointments.find({"user_id": client["_id"]}).sort([
+        ("appointment_date", -1),
+        ("time", -1)
+    ]))
 
-@bookings_bp.route("/<int:appointment_id>/cancel", methods=["POST"])
+    # Format time
+    for apt in appointments:
+        t = apt.get("time")
+        if t:
+            try:
+                parsed = datetime.strptime(t.strip(), "%H:%M")
+                apt["time"] = parsed.strftime("%I:%M %p")
+            except Exception:
+                apt["time"] = t
+        apt["_id"] = str(apt["_id"])
+
+    return jsonify(appointments), 200
+
+
+# ---------------- CANCEL APPOINTMENT ---------------- #
+@bookings_bp.route("/<string:appointment_id>/cancel", methods=["POST"])
 def cancel_appointment(appointment_id):
-    if 'username' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
+    if "username" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
 
-    username = session['username']
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True, buffered=True)
-    try:
-        cursor.execute("SELECT * FROM tbl_appointment WHERE id=%s", (appointment_id,))
-        apt = cursor.fetchone()
-        if not apt:
-            return jsonify({'error': 'Appointment not found'}), 404
+    username = session["username"]
+    db = get_db()
 
-        cursor.execute("SELECT c.id AS client_id FROM tbl_accounts a JOIN tbl_clients c ON c.account_id=a.id WHERE a.username=%s", (username,))
-        user_row = cursor.fetchone()
-        if not user_row or apt['user_id'] != user_row['client_id']:
-            return jsonify({'error': 'Not authorized to cancel this appointment'}), 403
+    appointment = db.appointments.find_one({"_id": ObjectId(appointment_id)})
+    if not appointment:
+        return jsonify({"error": "Appointment not found"}), 404
 
-        if apt['status'] in ('Cancelled', 'Completed', 'Abandoned', 'Done'):
-            return jsonify({'error': 'Appointment already in a terminal state, cannot be cancelled'}), 400
+    account = db.accounts.find_one({"username": username})
+    client = db.clients.find_one({"account_id": account["_id"]})
 
-        cursor.execute("UPDATE tbl_appointment SET status='Cancelled' WHERE id=%s", (appointment_id,))
+    if not client or appointment["user_id"] != client["_id"]:
+        return jsonify({"error": "Not authorized to cancel this appointment"}), 403
 
-        try:
-            cursor.execute("""
-                UPDATE tbl_staff_unavailability
-                SET unavailable_time=NULL
-                WHERE staff_id=%s AND unavailable_date=%s AND unavailable_time=%s
-            """, (apt['artist_id'], apt['appointment_date'], apt['time']))
-        except Exception:
-            pass
+    if appointment["status"] in ["Cancelled", "Completed", "Abandoned", "Done"]:
+        return jsonify({"error": "Appointment already in a terminal state"}), 400
 
-        conn.commit()
+    db.appointments.update_one({"_id": ObjectId(appointment_id)}, {"$set": {"status": "Cancelled"}})
 
-        try:
-            cursor.execute("""
-                SELECT acc.email, c.fullname
-                FROM tbl_clients c
-                JOIN tbl_accounts acc ON c.account_id=acc.id
-                WHERE c.id=%s
-            """, (apt['user_id'],))
-            u = cursor.fetchone()
-            if u and u.get('email'):
-                send_appointment_status_email(
-                    email=u['email'],
-                    fullname=u['fullname'],
-                    status='Cancelled',
-                    service=apt.get('service'),
-                    appointment_date=apt.get('appointment_date'),
-                    time=apt.get('time'),
-                    artist_name=apt.get('artist_name')
-                )
-        except Exception:
-            pass
+    # Release slot
+    db.staff_unavailability.update_one(
+        {
+            "staff_id": appointment["artist_id"],
+            "unavailable_date": appointment["appointment_date"],
+            "unavailable_time": appointment["time"]
+        },
+        {"$set": {"is_booked": False}}
+    )
 
-        return jsonify({'message': 'Appointment cancelled successfully'}), 200
-    except Exception as e:
-        return jsonify({'error': f"Error while cancelling the appointment: {str(e)}"}), 500
-    finally:
-        conn.close()
+    # Send email
+    user_account = db.accounts.find_one({"_id": account["_id"]})
+    if user_account and user_account.get("email"):
+        send_appointment_status_email(
+            email=user_account["email"],
+            fullname=session.get("fullname", ""),
+            status="Cancelled",
+            service=appointment.get("service"),
+            appointment_date=appointment.get("appointment_date"),
+            time=appointment.get("time"),
+            artist_name=appointment.get("artist_name")
+        )
+
+    return jsonify({"message": "Appointment cancelled successfully"}), 200
 
 
+# ---------------- AVAILABLE SLOTS ---------------- #
 @bookings_bp.route("/available_slots", methods=["GET"])
 def get_available_slots():
     date = request.args.get("date")
@@ -185,47 +176,38 @@ def get_available_slots():
     if not date or not staff_id:
         return jsonify({"error": "Missing parameters"}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT unavailable_time FROM tbl_staff_unavailability
-        WHERE staff_id=%s AND unavailable_date=%s
-        ORDER BY unavailable_time ASC
-    """, (staff_id, date))
-    rows = cursor.fetchall()
-    unavailable_times = {row["unavailable_time"] for row in rows}
+    db = get_db()
+    staff_oid = ObjectId(staff_id)
 
-    try:
-        dt = datetime.strptime(date, "%Y-%m-%d")
-        weekday = dt.weekday()
-    except Exception:
-        cursor.close()
-        conn.close()
-        return jsonify({"available_times": []})
+    unavailable = list(db.staff_unavailability.find(
+        {"staff_id": staff_oid, "unavailable_date": date, "is_booked": True},
+        {"unavailable_time": 1, "_id": 0}
+    ))
+    unavailable_times = {u["unavailable_time"] for u in unavailable}
 
-    # closed every sunday
-    if weekday == 6:
-        cursor.close()
-        conn.close()
+    dt = datetime.strptime(date, "%Y-%m-%d")
+    weekday = dt.weekday()
+    if weekday == 6:  # Sunday
         return jsonify({"available_times": []})
 
     start_hour = 9
     end_hour = 17 if weekday == 5 else 21
-    default_slots = [f"{h%12 or 12}:{m:02d} {'AM' if h < 12 else 'PM'}"
-                     for h in range(start_hour, end_hour) for m in [0]]
+    default_slots = [f"{h%12 or 12}:00 {'AM' if h < 12 else 'PM'}" for h in range(start_hour, end_hour)]
 
-    cursor.execute("""
-        SELECT time FROM tbl_appointment
-        WHERE appointment_date=%s AND artist_id=%s AND status!='Cancelled'
-    """, (date, staff_id))
-    booked = {row["time"] for row in cursor.fetchall()}
+    booked = list(db.appointments.find(
+        {"appointment_date": date, "artist_id": staff_oid, "status": {"$ne": "Cancelled"}},
+        {"time": 1, "_id": 0}
+    ))
+    booked_times = {b["time"] for b in booked}
 
-    unavailable_times_12hr = set([datetime.strptime(t, "%H:%M").strftime("%I:%M %p") for t in unavailable_times])
-    booked_12hr = set([datetime.strptime(t, "%H:%M").strftime("%I:%M %p") for t in booked])
-    all_unavailable = unavailable_times_12hr | booked_12hr
+    # Convert all to 12-hour format
+    def to_12h(t):
+        try:
+            return datetime.strptime(t, "%H:%M").strftime("%I:%M %p")
+        except Exception:
+            return t
 
+    all_unavailable = {to_12h(t) for t in (unavailable_times | booked_times)}
     available_times = [t for t in default_slots if t not in all_unavailable]
 
-    cursor.close()
-    conn.close()
     return jsonify({"available_times": available_times})

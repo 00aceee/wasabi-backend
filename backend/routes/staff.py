@@ -1,77 +1,96 @@
 from flask import Blueprint, request, jsonify
-from backend.db import get_connection
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+import os
 
 staff_bp = Blueprint("staff", __name__)
 
+# ---------------- MONGODB CONNECTION ---------------- #
+MONGO_URI = os.getenv("MONGO_URI", "your_mongodb_atlas_connection_string")
+client = MongoClient(MONGO_URI)
+db = client["your_database_name"]  # Replace with your DB name
+accounts_col = db["accounts"]
+staff_col = db["staff"]
+unavailability_col = db["staff_unavailability"]
+
+
+# ---------------- ADD STAFF UNAVAILABILITY ---------------- #
 @staff_bp.route("/unavailability", methods=["POST"])
 def add_unavailability():
     data = request.get_json()
-    staff_id = data.get('staff_id')
-    unavailable_date = data.get('unavailable_date')
-    unavailable_times = data.get('unavailable_times', [])
+    staff_id = data.get("staff_id")
+    unavailable_date = data.get("unavailable_date")
+    unavailable_times = data.get("unavailable_times", [])
 
     if not staff_id or not unavailable_date or not unavailable_times:
         return jsonify({"error": "Missing required fields"}), 400
 
-    conn = get_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM tbl_staff_unavailability WHERE staff_id=%s AND unavailable_date=%s",
-                       (staff_id, unavailable_date))
-        for t in unavailable_times:
-            cursor.execute("""
-                INSERT INTO tbl_staff_unavailability (staff_id, unavailable_date, unavailable_time)
-                VALUES (%s, %s, %s)
-            """, (staff_id, unavailable_date, t))
-        conn.commit()
+        # Remove existing entries for that date
+        unavailability_col.delete_many({"staff_id": staff_id, "unavailable_date": unavailable_date})
+
+        # Insert new unavailable times
+        documents = [
+            {"staff_id": staff_id, "unavailable_date": unavailable_date, "unavailable_time": t}
+            for t in unavailable_times
+        ]
+        unavailability_col.insert_many(documents)
+
         return jsonify({"message": "Unavailability saved successfully"}), 201
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        conn.close()
+        return jsonify({"error": f"Failed to save unavailability: {str(e)}"}), 500
 
+
+# ---------------- GET STAFF BY SERVICE ---------------- #
 @staff_bp.route("/by-service/<service>", methods=["GET"])
 def get_staff_by_service(service):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
+    service = service.lower()
+    role_map = {"haircut": "Barber", "tattoo": "TattooArtist"}
+    role = role_map.get(service)
+
+    if not role:
+        return jsonify([]), 200
+
     try:
-        role = None
-        if service.lower() == "haircut":
-            role = "Barber"
-        elif service.lower() == "tattoo":
-            role = "TattooArtist"
-        if not role:
-            return jsonify([]), 200
+        staff_list = list(
+            staff_col.find({"role": role, "specialization": role}, {"_id": 1, "fullname": 1})
+        )
+        # Convert ObjectId to string for JSON
+        for staff in staff_list:
+            staff["id"] = str(staff["_id"])
+            del staff["_id"]
 
-        query = """
-            SELECT a.id, s.fullname
-            FROM tbl_accounts AS a
-            JOIN tbl_staff AS s ON s.account_id = a.id
-            WHERE a.role = %s AND s.specialization = %s
-        """
-        cursor.execute(query, (role, role))
-        staff = cursor.fetchall()
-
-        return jsonify(staff), 200
+        return jsonify(staff_list), 200
     except Exception as e:
-        print("❌ Error in get_staff_by_service:", e)
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        return jsonify({"error": f"Failed to fetch staff: {str(e)}"}), 500
 
+
+# ---------------- GET STAFF UNAVAILABILITY LIST ---------------- #
 @staff_bp.route("/unavailability/list", methods=["GET"])
 def get_staff_unavailability_list():
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            SELECT tsu.*, s.fullname AS staff_name
-            FROM tbl_staff_unavailability tsu
-            JOIN tbl_staff s ON tsu.staff_id = s.id
-        """)
-        results = cursor.fetchall()
+        pipeline = [
+            {
+                "$lookup": {
+                    "from": "staff",
+                    "localField": "staff_id",
+                    "foreignField": "_id",
+                    "as": "staff_info"
+                }
+            },
+            {"$unwind": "$staff_info"},
+            {
+                "$project": {
+                    "_id": 0,
+                    "staff_id": 1,
+                    "unavailable_date": 1,
+                    "unavailable_time": 1,
+                    "staff_name": "$staff_info.fullname"
+                }
+            },
+            {"$sort": {"unavailable_date": 1, "unavailable_time": 1}}
+        ]
+        results = list(unavailability_col.aggregate(pipeline))
         return jsonify(results), 200
-    finally:
-        cursor.close()
-        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch unavailability: {str(e)}"}), 500
