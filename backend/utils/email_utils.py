@@ -1,5 +1,5 @@
-# /utils/email_utils.py
 import smtplib
+import requests
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
@@ -9,11 +9,15 @@ from datetime import datetime
 
 load_dotenv()
 
+# SMTP config
 SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
 BREVO_SMTP_LOGIN = os.getenv("BREVO_SMTP_LOGIN")
 BREVO_SMTP_KEY = os.getenv("BREVO_SMTP_KEY")
 SMTP_SERVER = os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com")
 SMTP_PORT = int(os.getenv("BREVO_SMTP_PORT", "587"))
+
+# API config
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
 def log_email(to_email, subject, html_body):
     db.emails.insert_one({
@@ -24,15 +28,42 @@ def log_email(to_email, subject, html_body):
     })
 
 def _send_html_email(to_email: str, subject: str, html_body: str):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"Marmu Barber & Tattoo Shop <{SENDER_EMAIL}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls()
-        server.login(BREVO_SMTP_LOGIN, BREVO_SMTP_KEY)
-        server.send_message(msg)
+    # Try SMTP first
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"Marmu Barber & Tattoo Shop <{SENDER_EMAIL}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(html_body, "html"))
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(BREVO_SMTP_LOGIN, BREVO_SMTP_KEY)
+            server.send_message(msg)
+
+        log_email(to_email, subject, html_body)
+        return
+    except Exception as smtp_error:
+        print(f"[SMTP ERROR] {smtp_error}")
+
+    # Fallback to Brevo API
+    try:
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "api-key": BREVO_API_KEY,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "sender": {"name": "Marmu Barber & Tattoo Shop", "email": SENDER_EMAIL},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html_body
+        }
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        log_email(to_email, subject, html_body)
+    except requests.exceptions.RequestException as api_error:
+        print(f"[BREVO API ERROR] {api_error}")
 
 def send_email_otp(email: str, subject: str, otp: str, expiry_minutes: int = 5):
     html_body = f"""
