@@ -2,7 +2,6 @@ from pymongo import MongoClient
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env
 load_dotenv()
 
 mongo_uri = os.getenv("MONGO_URI")
@@ -12,5 +11,5 @@ if not mongo_uri:
 client = MongoClient(mongo_uri)
 db = client["marmudb"]
 
-def get_db():
+def get_connection():
     return db
