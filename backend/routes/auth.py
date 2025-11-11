@@ -9,7 +9,7 @@ import random
 auth_bp = Blueprint("auth", __name__)
 
 OTP_EXPIRY_MINUTES = 5
-otp_storage = {}  # In-memory OTP store
+otp_storage = {} 
 
 # ---------------- LOGIN ---------------- #
 @auth_bp.route("/login", methods=["POST"])
@@ -22,7 +22,7 @@ def login():
         return jsonify({"error": "Username/Email and password required"}), 400
 
     db = get_db()
-    user = db.accounts.find_one(
+    user = db.tbl_accounts.find_one(
         {"$or": [{"username": username_or_email}, {"email": username_or_email}]}
     )
 
@@ -86,7 +86,7 @@ def change_password():
         }), 400
 
     db = get_db()
-    user = db.accounts.find_one({"username": session["username"]})
+    user = db.tbl_accounts.find_one({"username": session["username"]})
     if not user:
         return jsonify({"success": False, "message": "User not found"}), 404
 
@@ -96,7 +96,7 @@ def change_password():
     if hash_password(new_password) == user.get("hash_pass"):
         return jsonify({"success": False, "message": "New password must be different"}), 400
 
-    db.accounts.update_one(
+    db.tbl_accounts.update_one(
         {"_id": user["_id"]},
         {"$set": {"hash_pass": hash_password(new_password)}}
     )
@@ -111,7 +111,7 @@ def forgot_send_otp():
         return jsonify({"success": False, "message": "Invalid email format"}), 400
 
     db = get_db()
-    if not db.accounts.find_one({"email": email}):
+    if not db.tbl_accounts.find_one({"email": email}):
         return jsonify({"success": False, "message": "No account found with this email"}), 404
 
     otp = str(random.randint(100000, 999999))
@@ -147,7 +147,7 @@ def reset_password():
         return jsonify({"success": False, "message": "Invalid or expired OTP"}), 400
 
     db = get_db()
-    db.accounts.update_one(
+    db.tbl_accounts.update_one(
         {"email": email},
         {"$set": {"hash_pass": hash_password(new_pass)}}
     )
@@ -192,11 +192,11 @@ def signup_verify():
         return jsonify({"error": "Invalid or expired OTP"}), 400
 
     db = get_db()
-    if db.accounts.find_one({"$or": [{"username": username}, {"email": email}]}):
+    if db.tbl_accounts.find_one({"$or": [{"username": username}, {"email": email}]}):
         return jsonify({"error": "Username or email already exists"}), 409
 
     role = "User"
-    result = db.accounts.insert_one({
+    result = db.tbl_accounts.insert_one({
         "username": username,
         "email": email,
         "hash_pass": hash_password(password),
