@@ -3,10 +3,12 @@ from flask import Flask, send_from_directory
 import os
 from flask_cors import CORS
 from backend.routes import auth_bp, bookings_bp, feedback_bp, admin_bp, staff_bp, services_bp
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
-CORS(app, origins=["https://marmuappointmentsystem.netlify.app/"], supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": "https://marmuappointmentsystem.netlify.app"}}, supports_credentials=True)
 app.secret_key = "supersecretkey" 
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 @app.route('/assets/<path:filename>')
 def serve_assets(filename):

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, send_from_directory, request
+from flask import Blueprint, jsonify, send_from_directory, request, url_for
 import os
 
 services_bp = Blueprint("services", __name__)
@@ -32,8 +32,9 @@ def get_service_images():
         for filename in os.listdir(folder_path):
             if filename.lower().endswith(".png"):
                 name = os.path.splitext(filename)[0].replace("_", " ").replace("-", " ").title()
-                # Use request.host_url for dynamic host URL
-                image_url = f"{request.host_url.rstrip('/')}/api/services/assets/{service_type}_images/{filename}"
+                image_url = url_for("services.serve_assets",
+                                    filename=f"{service_type}_images/{filename}",
+                                    _external=True)
                 images.append({"name": name, "image": image_url})
         return sorted(images, key=lambda x: x["name"])
 
