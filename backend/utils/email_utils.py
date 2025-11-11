@@ -8,10 +8,20 @@ from backend.db import db
 from datetime import datetime
 
 load_dotenv()
-YOUR_GMAIL = os.getenv("GMAIL_ADDRESS")
-YOUR_APP_PASSWORD = os.getenv("GMAIL_APP")
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+
+# Brevo (Sendinblue) SMTP configuration
+# Required env vars:
+#   BREVO_SENDER_EMAIL  -> verified sender email in Brevo
+#   BREVO_SMTP_LOGIN    -> Brevo SMTP login (often your Brevo email)
+#   BREVO_SMTP_KEY      -> Brevo SMTP key (generated in Brevo)
+# Optional overrides:
+#   BREVO_SMTP_HOST (default: smtp-relay.brevo.com)
+#   BREVO_SMTP_PORT (default: 587)
+SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
+BREVO_SMTP_LOGIN = os.getenv("BREVO_SMTP_LOGIN")
+BREVO_SMTP_KEY = os.getenv("BREVO_SMTP_KEY")
+SMTP_SERVER = os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com")
+SMTP_PORT = int(os.getenv("BREVO_SMTP_PORT", "587"))
 
 def log_email(to_email, subject, html_body):
     db.emails.insert_one({
@@ -24,12 +34,12 @@ def log_email(to_email, subject, html_body):
 def _send_html_email(to_email: str, subject: str, html_body: str):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = f"Marmu Barber & Tattoo Shop <{YOUR_GMAIL}>"
+    msg["From"] = f"Marmu Barber & Tattoo Shop <{SENDER_EMAIL}>"
     msg["To"] = to_email
     msg.attach(MIMEText(html_body, "html"))
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
-        server.login(YOUR_GMAIL, YOUR_APP_PASSWORD)
+        server.login(BREVO_SMTP_LOGIN, BREVO_SMTP_KEY)
         server.send_message(msg)
 
 def send_email_otp(email: str, subject: str, otp: str, expiry_minutes: int = 5):
