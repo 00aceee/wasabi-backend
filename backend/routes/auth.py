@@ -16,7 +16,7 @@ otp_storage = {}  # In-memory OTP store
 def login():
     data = request.get_json()
     username_or_email = data.get("username")
-    password = data.get("password")
+    password = data.get("hash_pass")
 
     if not username_or_email or not password:
         return jsonify({"error": "Username/Email and password required"}), 400
