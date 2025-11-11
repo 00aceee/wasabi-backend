@@ -9,14 +9,6 @@ from datetime import datetime
 
 load_dotenv()
 
-# Brevo (Sendinblue) SMTP configuration
-# Required env vars:
-#   BREVO_SENDER_EMAIL  -> verified sender email in Brevo
-#   BREVO_SMTP_LOGIN    -> Brevo SMTP login (often your Brevo email)
-#   BREVO_SMTP_KEY      -> Brevo SMTP key (generated in Brevo)
-# Optional overrides:
-#   BREVO_SMTP_HOST (default: smtp-relay.brevo.com)
-#   BREVO_SMTP_PORT (default: 587)
 SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
 BREVO_SMTP_LOGIN = os.getenv("BREVO_SMTP_LOGIN")
 BREVO_SMTP_KEY = os.getenv("BREVO_SMTP_KEY")
@@ -44,20 +36,7 @@ def _send_html_email(to_email: str, subject: str, html_body: str):
 
 def send_email_otp(email: str, subject: str, otp: str, expiry_minutes: int = 5):
     html_body = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; background-color: #333; padding: 20px;">
-        <div style="max-width: 600px; margin: auto; background: #333; padding: 30px; border-radius: 8px; border: 4px solid goldenrod;">
-            <h2 style="color: goldenrod; text-align: center;">Marmu Barber & Tattoo Shop</h2>
-            <p style="font-size: 16px; color: #fff;">Use the following OTP to proceed:</p>
-            <div style="text-align: center; margin: 30px 0;">
-                <span style="font-size: 32px; font-weight: bold; color: #ffffff; background-color: #333; padding: 15px 25px; border-radius: 4px; border: 2px solid goldenrod; letter-spacing: 5px;">
-                    {otp}
-                </span>
-            </div>
-            <p style="font-size: 14px; color: #ddd;">This code is valid for <strong>{expiry_minutes} minutes</strong>.</p>
-        </div>
-    </body>
-    </html>
+   {otp}
     """
     _send_html_email(email, subject, html_body)
 
