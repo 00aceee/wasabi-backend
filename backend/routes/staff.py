@@ -6,8 +6,8 @@ staff_bp = Blueprint("staff", __name__)
 
 # ---------------- COLLECTIONS ---------------- #
 db = get_db()
-accounts_col = db["accounts"]
-staff_col = db["staff"]
+accounts_col = db["tbl_accounts"]
+staff_col = db["tbl_staff"]
 unavailability_col = db["staff_unavailability"]
 
 
@@ -77,7 +77,7 @@ def get_staff_unavailability_list():
         pipeline = [
             {
                 "$lookup": {
-                    "from": "staff",
+                    "from": "tbl_staff",
                     "localField": "staff_id",
                     "foreignField": "_id",
                     "as": "staff_info"

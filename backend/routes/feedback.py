@@ -40,7 +40,7 @@ def post_feedback():
     db = get_db()
 
     # Find user
-    account = db.accounts.find_one({"username": username})
+    account = db.tbl_accounts.find_one({"username": username})
     if not account:
         return jsonify({"error": "User not found"}), 404
 

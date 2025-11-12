@@ -27,7 +27,7 @@ def create_booking():
     db = get_db()
 
     # Find client and staff
-    account = db.accounts.find_one({"username": username})
+    account = db.tbl_accounts.find_one({"username": username})
     if not account:
         return jsonify({"error": "User not found"}), 404
 
@@ -35,7 +35,7 @@ def create_booking():
     if not client:
         return jsonify({"error": "Client profile not found"}), 404
 
-    staff = db.staff.find_one({"_id": ObjectId(staff_id)})
+    staff = db.tbl_staff.find_one({"_id": ObjectId(staff_id)})
     if not staff:
         return jsonify({"error": "Artist not found"}), 404
     artist_name = staff["fullname"]
@@ -91,7 +91,7 @@ def create_booking():
 def get_user_appointments(username):
     db = get_db()
 
-    account = db.accounts.find_one({"username": username})
+    account = db.tbl_accounts.find_one({"username": username})
     if not account:
         return jsonify({"error": "User not found"}), 404
 
@@ -131,7 +131,7 @@ def cancel_appointment(appointment_id):
     if not appointment:
         return jsonify({"error": "Appointment not found"}), 404
 
-    account = db.accounts.find_one({"username": username})
+    account = db.tbl_accounts.find_one({"username": username})
     client = db.clients.find_one({"account_id": account["_id"]})
 
     if not client or appointment["user_id"] != client["_id"]:
@@ -153,7 +153,7 @@ def cancel_appointment(appointment_id):
     )
 
     # Send email
-    user_account = db.accounts.find_one({"_id": account["_id"]})
+    user_account = db.tbl_accounts.find_one({"_id": account["_id"]})
     if user_account and user_account.get("email"):
         send_appointment_status_email(
             email=user_account["email"],

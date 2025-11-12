@@ -22,7 +22,7 @@ def admin_dashboard_data():
     # Artist performance (top 10)
     pipeline = [
         {"$match": {"status": {"$in": ["Completed", "Done"]}}},
-        {"$lookup": {"from": "staff", "localField": "artist_id", "foreignField": "_id", "as": "artist"}},
+        {"$lookup": {"from": "tbl_staff", "localField": "artist_id", "foreignField": "_id", "as": "artist"}},
         {"$unwind": {"path": "$artist", "preserveNullAndEmptyArrays": True}},
         {"$group": {"_id": {"$ifNull": ["$artist.fullname", "Unassigned"]}, "total_jobs": {"$sum": 1}}},
         {"$sort": {"total_jobs": -1}},
@@ -104,8 +104,8 @@ def get_users():
     }
     sort_order = sort_map.get(sort, [("fullname", 1)])
     
-    total = db.accounts.count_documents(query)
-    users = list(db.accounts.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
+    total = db.tbl_accounts.count_documents(query)
+    users = list(db.tbl_accounts.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
     
     # Fill fullname from role-specific collection
     data = []
@@ -116,7 +116,7 @@ def get_users():
                 client = db.clients.find_one({"account_id": u["_id"]})
                 fullname = client.get("fullname") if client else ""
             elif u["role"].lower() in ["barber", "tattooartist"]:
-                staff = db.staff.find_one({"account_id": u["_id"]})
+                staff = db.tbl_staff.find_one({"account_id": u["_id"]})
                 fullname = staff.get("fullname") if staff else ""
             elif u["role"].lower() == "admin":
                 admin = db.admins.find_one({"account_id": u["_id"]})
@@ -148,7 +148,7 @@ def add_user():
     
     db = get_db()
     hashed_password = hash_password(password)
-    account_id = db.accounts.insert_one({
+    account_id = db.tbl_accounts.insert_one({
         "username": username,
         "email": email,
         "hash_pass": hashed_password,
@@ -158,7 +158,7 @@ def add_user():
     if role.lower() == "client":
         db.clients.insert_one({"account_id": account_id, "fullname": fullname})
     elif role.lower() in ["barber", "tattooartist"]:
-        db.staff.insert_one({"account_id": account_id, "fullname": fullname, "specialization": role})
+        db.tbl_staff.insert_one({"account_id": account_id, "fullname": fullname, "specialization": role})
     elif role.lower() == "admin":
         db.admins.insert_one({"account_id": account_id, "fullname": fullname})
     
@@ -232,7 +232,7 @@ def update_appointment(appointment_id):
     
     if appointment and new_status.lower() in ("approved", "denied"):
         client = db.clients.find_one({"_id": appointment["user_id"]})
-        account = db.accounts.find_one({"_id": client["account_id"]}) if client else None
+        account = db.tbl_accounts.find_one({"_id": client["account_id"]}) if client else None
         if account:
             send_appointment_status_email(
                 email=account["email"],
@@ -305,7 +305,7 @@ def admin_reply_feedback(feedback_id):
     if send_email:
         client = db.clients.find_one({"account_id": feedback["account_id"]})
         if client:
-            account = db.accounts.find_one({"_id": client["account_id"]})
+            account = db.tbl_accounts.find_one({"_id": client["account_id"]})
             if account:
                 send_feedback_reply_email(account["email"], feedback["username"], reply)
     
