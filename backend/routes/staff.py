@@ -59,7 +59,7 @@ def get_staff_by_service(service):
         return jsonify([]), 200
 
     try:
-        staff_list = list(staff_col.find({"role": role}, {"fullname": 1}))
+        staff_list = list(staff_col.find({"specialization": role}, {"fullname": 1}))
         # Convert ObjectId to string
         for staff in staff_list:
             staff["id"] = str(staff["_id"])
