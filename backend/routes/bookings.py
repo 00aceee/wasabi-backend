@@ -104,8 +104,9 @@ def get_user_appointments(username):
         ("time", -1)
     ]))
 
-    # Format time
+    # Normalize fields for JSON
     for apt in appointments:
+        # Time to 12h format if stored as 24h
         t = apt.get("time")
         if t:
             try:
@@ -113,7 +114,18 @@ def get_user_appointments(username):
                 apt["time"] = parsed.strftime("%I:%M %p")
             except Exception:
                 apt["time"] = t
-        apt["_id"] = str(apt["_id"])
+
+        # Convert ObjectIds and datetimes to strings
+        try:
+            apt["_id"] = str(apt["_id"])
+        except Exception:
+            pass
+        if isinstance(apt.get("user_id"), ObjectId):
+            apt["user_id"] = str(apt["user_id"])
+        if isinstance(apt.get("artist_id"), ObjectId):
+            apt["artist_id"] = str(apt["artist_id"])
+        if isinstance(apt.get("created_at"), datetime):
+            apt["created_at"] = apt["created_at"].strftime("%Y-%m-%d %H:%M:%S")
 
     return jsonify(appointments), 200
 
