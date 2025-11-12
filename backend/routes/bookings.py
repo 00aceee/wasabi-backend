@@ -204,8 +204,10 @@ def get_available_slots():
     db = get_db()
     staff_oid = ObjectId(staff_id)
 
+    # Combine explicitly set staff unavailability (any entry for the date)
+    # and later we'll union with booked times from appointments.
     unavailable = list(db.staff_unavailability.find(
-        {"staff_id": staff_oid, "unavailable_date": date, "is_booked": True},
+        {"staff_id": staff_oid, "unavailable_date": date},
         {"unavailable_time": 1, "_id": 0}
     ))
     unavailable_times = {u["unavailable_time"] for u in unavailable}
