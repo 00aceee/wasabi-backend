@@ -64,6 +64,15 @@ def login():
         "redirect_url": redirect_url
     }), 200
 
+# ---------------- LOGOUT ---------------- #
+@auth_bp.route("/logout", methods=["POST", "OPTIONS"])
+def logout():
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+    # Clear server-side session so /current_user returns 401
+    session.clear()
+    return jsonify({"message": "Logged out"}), 200
+
 # ---------------- CHANGE PASSWORD ---------------- #
 @auth_bp.route("/change_password", methods=["POST"])
 def change_password():
