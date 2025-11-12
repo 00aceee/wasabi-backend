@@ -15,7 +15,7 @@ admin_bp = Blueprint("admin", __name__)
 def admin_dashboard_data():
     db = get_db()
     
-    total_clients = db.tbl_clients.count_documents({})
+    total_clients = db.clients.count_documents({})
     pending = db.tbl_appointments.count_documents({"status": "Pending"})
     new_feedback = db.tbl_feedback.count_documents({"reply": {"$in": [None, ""]}})
     
@@ -113,7 +113,7 @@ def get_users():
         fullname = u.get("fullname")
         if not fullname:
             if u["role"].lower() == "client":
-                client = db.tbl_clients.find_one({"account_id": u["_id"]})
+                client = db.clients.find_one({"account_id": u["_id"]})
                 fullname = client.get("fullname") if client else ""
             elif u["role"].lower() in ["barber", "tattooartist"]:
                 staff = db.tbl_staff.find_one({"account_id": u["_id"]})
@@ -156,7 +156,7 @@ def add_user():
     }).inserted_id
     
     if role.lower() == "client":
-        db.tbl_clients.insert_one({"account_id": account_id, "fullname": fullname})
+        db.clients.insert_one({"account_id": account_id, "fullname": fullname})
     elif role.lower() in ["barber", "tattooartist"]:
         db.tbl_staff.insert_one({"account_id": account_id, "fullname": fullname, "specialization": role})
     elif role.lower() == "admin":
@@ -231,7 +231,7 @@ def update_appointment(appointment_id):
     )
     
     if appointment and new_status.lower() in ("approved", "denied"):
-        client = db.tbl_clients.find_one({"_id": appointment["user_id"]})
+        client = db.clients.find_one({"_id": appointment["user_id"]})
         account = db.tbl_accounts.find_one({"_id": client["account_id"]}) if client else None
         if account:
             send_appointment_status_email(
@@ -303,7 +303,7 @@ def admin_reply_feedback(feedback_id):
         return jsonify({"message": "Feedback not found."}), 404
     
     if send_email:
-        client = db.tbl_clients.find_one({"account_id": feedback["account_id"]})
+        client = db.clients.find_one({"account_id": feedback["account_id"]})
         if client:
             account = db.tbl_accounts.find_one({"_id": client["account_id"]})
             if account:

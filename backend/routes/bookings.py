@@ -35,7 +35,7 @@ def create_booking():
     if not client:
         return jsonify({"error": "Client profile not found"}), 404
 
-    staff = db.staff.find_one({"_id": ObjectId(staff_id)})
+    staff = db.tbl_staff.find_one({"_id": ObjectId(staff_id)})
     if not staff:
         return jsonify({"error": "Artist not found"}), 404
     artist_name = staff["fullname"]

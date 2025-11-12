@@ -12,7 +12,7 @@ feedback_bp = Blueprint("feedback", __name__)
 def get_feedback():
     db = get_db()
     feedback_list = list(
-        db.feedback.find({}, {"_id": 0}).sort("date_submitted", -1)
+        db.tbl_feedback.find({}, {"_id": 0}).sort("date_submitted", -1)
     )
 
     # Format the date for display
@@ -40,7 +40,7 @@ def post_feedback():
     db = get_db()
 
     # Find user
-    account = db.accounts.find_one({"username": username})
+    account = db.tbl_accounts.find_one({"username": username})
     if not account:
         return jsonify({"error": "User not found"}), 404
 
@@ -54,7 +54,7 @@ def post_feedback():
     }
 
     try:
-        db.feedback.insert_one(feedback_doc)
+        db.tbl_feedback.insert_one(feedback_doc)
         return jsonify({"message": "Feedback submitted successfully!"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500

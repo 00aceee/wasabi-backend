@@ -35,10 +35,10 @@ def login():
         client = db.clients.find_one({"account_id": user["_id"]})
         fullname = client["fullname"] if client else ""
     elif user["role"].lower() in ["barber", "tattooartist"]:
-        staff = db.staff.find_one({"account_id": user["_id"]})
+        staff = db.tbl_staff.find_one({"account_id": user["_id"]})
         fullname = staff["fullname"] if staff else ""
     elif user["role"].lower() == "admin":
-        admin = db.admins.find_one({"account_id": user["_id"]})
+        admin = db.tbl_admins.find_one({"account_id": user["_id"]})
         fullname = admin["fullname"] if admin else ""
 
     # Store session data
