@@ -208,9 +208,21 @@ def get_appointments():
     
     total = db.appointments.count_documents(query)
     appointments = list(db.appointments.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
+
+    # Normalize ObjectIds and datetimes for JSON
     for a in appointments:
-        a["id"] = str(a["_id"])
-    
+        try:
+            a["id"] = str(a["_id"])  # explicit id field
+            a["_id"] = str(a["_id"])  # replace ObjectId with string
+        except Exception:
+            pass
+        if isinstance(a.get("user_id"), ObjectId):
+            a["user_id"] = str(a["user_id"])
+        if isinstance(a.get("artist_id"), ObjectId):
+            a["artist_id"] = str(a["artist_id"])
+        if isinstance(a.get("created_at"), datetime):
+            a["created_at"] = a["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+
     return jsonify({"data": appointments, "total": total, "page": page, "per_page": per_page})
 
 # -----------------------------
