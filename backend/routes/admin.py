@@ -216,6 +216,8 @@ def get_appointments():
             a["_id"] = str(a["_id"])  # replace ObjectId with string
         except Exception:
             pass
+        # Add a separate display_id for tables
+        a["display_id"] = a.get("display_id") or (a.get("id")[-6:] if a.get("id") else None)
         if isinstance(a.get("user_id"), ObjectId):
             a["user_id"] = str(a["user_id"])
         if isinstance(a.get("artist_id"), ObjectId):

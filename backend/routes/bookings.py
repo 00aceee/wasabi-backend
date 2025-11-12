@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify, session
 from datetime import datetime, timedelta
 from backend.db import get_db
+from pymongo import ReturnDocument
 from backend.utils.email_utils import send_appointment_status_email
 from bson import ObjectId
 
@@ -61,6 +62,15 @@ def create_booking():
     if recent >= 1:
         return jsonify({"error": f"You can only book one {service} every 2 weeks."}), 400
 
+    # Generate human-friendly appointment code
+    seq_doc = db.counters.find_one_and_update(
+        {"_id": "appointment"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    code_str = f"APT-{int(seq_doc.get('seq', 1)):06d}" if seq_doc else None
+
     # Create booking
     appointment = {
         "user_id": client["_id"],
@@ -72,7 +82,8 @@ def create_booking():
         "status": "Pending",
         "artist_id": staff["_id"],
         "artist_name": artist_name,
-        "created_at": datetime.now()
+        "created_at": datetime.now(),
+        "display_id": code_str
     }
     db.appointments.insert_one(appointment)
 
@@ -120,6 +131,8 @@ def get_user_appointments(username):
             apt["_id"] = str(apt["_id"])
         except Exception:
             pass
+        # Friendly display id for UI
+        apt["display_id"] = apt.get("display_id") or (apt.get("_id")[-6:] if apt.get("_id") else None)
         if isinstance(apt.get("user_id"), ObjectId):
             apt["user_id"] = str(apt["user_id"])
         if isinstance(apt.get("artist_id"), ObjectId):
