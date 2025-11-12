@@ -112,7 +112,7 @@ def get_users():
     for u in users:
         fullname = u.get("fullname")
         if not fullname:
-            if u["role"].lower() == "client":
+            if u["role"].lower() == "user":
                 client = db.clients.find_one({"account_id": u["_id"]})
                 fullname = client.get("fullname") if client else ""
             elif u["role"].lower() in ["barber", "tattooartist"]:
@@ -338,3 +338,23 @@ def toggle_feedback_resolved(feedback_id):
         return jsonify({"message": "Feedback not found."}), 404
     
     return jsonify({"message": f"Feedback status updated to resolved={resolved_status}"}), 200
+
+# -----------------------------
+# Route 11: Staff List By Role
+# -----------------------------
+@admin_bp.route("/staff", methods=["GET"])
+def admin_get_staff():
+    db = get_db()
+    role = (request.args.get("role") or "").strip()
+    if not role:
+        return jsonify([]), 200
+
+    role_l = role.lower()
+    if role_l in ("barber", "tattooartist"):
+        specialization = "Barber" if role_l == "barber" else "TattooArtist"
+    else:
+        specialization = role
+
+    cursor = db.tbl_staff.find({"specialization": specialization}, {"_id": 1, "fullname": 1})
+    staff_list = [{"id": str(doc.get("_id")), "fullname": doc.get("fullname", "") or ""} for doc in cursor]
+    return jsonify(staff_list), 200
