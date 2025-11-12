@@ -12,8 +12,14 @@ unavailability_col = db["staff_unavailability"]
 
 
 # ---------------- ADD STAFF UNAVAILABILITY ---------------- #
-@staff_bp.route("/unavailability", methods=["POST"])
+# Support both legacy and current frontend paths
+@staff_bp.route("/unavailability", methods=["POST", "OPTIONS"])
+@staff_bp.route("/availability", methods=["POST", "OPTIONS"])
 def add_unavailability():
+    # Handle CORS preflight explicitly if needed
+    from flask import make_response
+    if request.method == "OPTIONS":
+        return make_response(('', 200))
     data = request.get_json()
     staff_id = data.get("staff_id")
     unavailable_date = data.get("unavailable_date")
