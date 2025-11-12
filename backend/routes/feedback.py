@@ -22,6 +22,12 @@ def get_feedback():
         else:
             f["date"] = f.get("date_submitted", "")
         f.pop("date_submitted", None)
+        # Ensure ObjectIds are strings
+        try:
+            if isinstance(f.get("account_id"), ObjectId):
+                f["account_id"] = str(f["account_id"])
+        except Exception:
+            pass
 
     return jsonify(feedback_list), 200
 

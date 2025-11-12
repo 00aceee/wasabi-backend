@@ -289,8 +289,15 @@ def get_feedback_admin():
     total = db.feedback.count_documents(query)
     feedback = list(db.feedback.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
     for f in feedback:
-        f["id"] = str(f["_id"])
+        f["id"] = str(f["_id"]) if f.get("_id") else None
         f["reply"] = f.get("reply", "")
+        # Make nested types serializable
+        if isinstance(f.get("_id"), ObjectId):
+            f["_id"] = str(f["_id"])  # replace ObjectId
+        if isinstance(f.get("account_id"), ObjectId):
+            f["account_id"] = str(f["account_id"])
+        if isinstance(f.get("date_submitted"), datetime):
+            f["date_submitted"] = f["date_submitted"].strftime("%Y-%m-%d %H:%M")
     
     return jsonify({"data": feedback, "total": total, "page": page, "per_page": per_page})
 
