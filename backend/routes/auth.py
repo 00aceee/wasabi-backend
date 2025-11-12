@@ -22,7 +22,7 @@ def login():
         return jsonify({"error": "Username/Email and password required"}), 400
 
     db = get_db()
-    user = db.tbl_accounts.find_one(
+    user = db.accounts.find_one(
         {"$or": [{"username": username_or_email}, {"email": username_or_email}]}
     )
 
@@ -35,10 +35,10 @@ def login():
         client = db.clients.find_one({"account_id": user["_id"]})
         fullname = client["fullname"] if client else ""
     elif user["role"].lower() in ["barber", "tattooartist"]:
-        staff = db.tbl_staff.find_one({"account_id": user["_id"]})
+        staff = db.staff.find_one({"account_id": user["_id"]})
         fullname = staff["fullname"] if staff else ""
     elif user["role"].lower() == "admin":
-        admin = db.tbl_admins.find_one({"account_id": user["_id"]})
+        admin = db.admins.find_one({"account_id": user["_id"]})
         fullname = admin["fullname"] if admin else ""
 
     # Store session data
@@ -86,7 +86,7 @@ def change_password():
         }), 400
 
     db = get_db()
-    user = db.tbl_accounts.find_one({"username": session["username"]})
+    user = db.accounts.find_one({"username": session["username"]})
     if not user:
         return jsonify({"success": False, "message": "User not found"}), 404
 
@@ -96,7 +96,7 @@ def change_password():
     if hash_password(new_password) == user.get("hash_pass"):
         return jsonify({"success": False, "message": "New password must be different"}), 400
 
-    db.tbl_accounts.update_one(
+    db.accounts.update_one(
         {"_id": user["_id"]},
         {"$set": {"hash_pass": hash_password(new_password)}}
     )
@@ -111,7 +111,7 @@ def forgot_send_otp():
         return jsonify({"success": False, "message": "Invalid email format"}), 400
 
     db = get_db()
-    if not db.tbl_accounts.find_one({"email": email}):
+    if not db.accounts.find_one({"email": email}):
         return jsonify({"success": False, "message": "No account found with this email"}), 404
 
     otp = str(random.randint(100000, 999999))
@@ -147,7 +147,7 @@ def reset_password():
         return jsonify({"success": False, "message": "Invalid or expired OTP"}), 400
 
     db = get_db()
-    db.tbl_accounts.update_one(
+    db.accounts.update_one(
         {"email": email},
         {"$set": {"hash_pass": hash_password(new_pass)}}
     )
@@ -192,11 +192,11 @@ def signup_verify():
         return jsonify({"error": "Invalid or expired OTP"}), 400
 
     db = get_db()
-    if db.tbl_accounts.find_one({"$or": [{"username": username}, {"email": email}]}):
+    if db.accounts.find_one({"$or": [{"username": username}, {"email": email}]}):
         return jsonify({"error": "Username or email already exists"}), 409
 
     role = "User"
-    result = db.tbl_accounts.insert_one({
+    result = db.accounts.insert_one({
         "username": username,
         "email": email,
         "hash_pass": hash_password(password),

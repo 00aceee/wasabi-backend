@@ -16,19 +16,19 @@ def admin_dashboard_data():
     db = get_db()
     
     total_clients = db.clients.count_documents({})
-    pending = db.tbl_appointments.count_documents({"status": "Pending"})
-    new_feedback = db.tbl_feedback.count_documents({"reply": {"$in": [None, ""]}})
+    pending = db.appointments.count_documents({"status": "Pending"})
+    new_feedback = db.feedback.count_documents({"reply": {"$in": [None, ""]}})
     
     # Artist performance (top 10)
     pipeline = [
         {"$match": {"status": {"$in": ["Completed", "Done"]}}},
-        {"$lookup": {"from": "tbl_staff", "localField": "artist_id", "foreignField": "_id", "as": "artist"}},
+        {"$lookup": {"from": "staff", "localField": "artist_id", "foreignField": "_id", "as": "artist"}},
         {"$unwind": {"path": "$artist", "preserveNullAndEmptyArrays": True}},
         {"$group": {"_id": {"$ifNull": ["$artist.fullname", "Unassigned"]}, "total_jobs": {"$sum": 1}}},
         {"$sort": {"total_jobs": -1}},
         {"$limit": 10}
     ]
-    artist_performance = [{"artist_name": a["_id"], "total_jobs": a["total_jobs"]} for a in db.tbl_appointments.aggregate(pipeline)]
+    artist_performance = [{"artist_name": a["_id"], "total_jobs": a["total_jobs"]} for a in db.appointments.aggregate(pipeline)]
     
     return jsonify({
         "total_clients": total_clients,
@@ -51,7 +51,7 @@ def appointments_summary():
             "approvedAppointments": {"$sum": {"$cond": [{"$eq": ["$status", "Approved"]}, 1, 0]}}
         }}
     ]
-    summary = list(db.tbl_appointments.aggregate(pipeline))
+    summary = list(db.appointments.aggregate(pipeline))
     summary = summary[0] if summary else {"totalAppointments": 0, "pendingAppointments": 0, "approvedAppointments": 0}
     
     return jsonify(summary)
@@ -70,7 +70,7 @@ def monthly_report():
         }},
         {"$group": {"_id": "$service", "count": {"$sum": 1}}}
     ]
-    rows = list(db.tbl_appointments.aggregate(pipeline))
+    rows = list(db.appointments.aggregate(pipeline))
     
     result = {"haircut": 0, "tattoo": 0}
     for row in rows:
@@ -104,8 +104,8 @@ def get_users():
     }
     sort_order = sort_map.get(sort, [("fullname", 1)])
     
-    total = db.tbl_accounts.count_documents(query)
-    users = list(db.tbl_accounts.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
+    total = db.accounts.count_documents(query)
+    users = list(db.accounts.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
     
     # Fill fullname from role-specific collection
     data = []
@@ -116,10 +116,10 @@ def get_users():
                 client = db.clients.find_one({"account_id": u["_id"]})
                 fullname = client.get("fullname") if client else ""
             elif u["role"].lower() in ["barber", "tattooartist"]:
-                staff = db.tbl_staff.find_one({"account_id": u["_id"]})
+                staff = db.staff.find_one({"account_id": u["_id"]})
                 fullname = staff.get("fullname") if staff else ""
             elif u["role"].lower() == "admin":
-                admin = db.tbl_admins.find_one({"account_id": u["_id"]})
+                admin = db.admins.find_one({"account_id": u["_id"]})
                 fullname = admin.get("fullname") if admin else ""
         data.append({
             "id": str(u["_id"]),
@@ -148,7 +148,7 @@ def add_user():
     
     db = get_db()
     hashed_password = hash_password(password)
-    account_id = db.tbl_accounts.insert_one({
+    account_id = db.accounts.insert_one({
         "username": username,
         "email": email,
         "hash_pass": hashed_password,
@@ -158,9 +158,9 @@ def add_user():
     if role.lower() == "client":
         db.clients.insert_one({"account_id": account_id, "fullname": fullname})
     elif role.lower() in ["barber", "tattooartist"]:
-        db.tbl_staff.insert_one({"account_id": account_id, "fullname": fullname, "specialization": role})
+        db.staff.insert_one({"account_id": account_id, "fullname": fullname, "specialization": role})
     elif role.lower() == "admin":
-        db.tbl_admins.insert_one({"account_id": account_id, "fullname": fullname})
+        db.admins.insert_one({"account_id": account_id, "fullname": fullname})
     
     return jsonify({"message": "User added successfully"}), 201
 
@@ -206,8 +206,8 @@ def get_appointments():
     }
     sort_order = sort_map.get(sort, [("appointment_date", 1)])
     
-    total = db.tbl_appointments.count_documents(query)
-    appointments = list(db.tbl_appointments.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
+    total = db.appointments.count_documents(query)
+    appointments = list(db.appointments.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
     for a in appointments:
         a["id"] = str(a["_id"])
     
@@ -224,7 +224,7 @@ def update_appointment(appointment_id):
         return jsonify({"error": "Missing status field"}), 400
     
     db = get_db()
-    appointment = db.tbl_appointments.find_one_and_update(
+    appointment = db.appointments.find_one_and_update(
         {"_id": ObjectId(appointment_id)},
         {"$set": {"status": new_status}},
         return_document=True
@@ -232,7 +232,7 @@ def update_appointment(appointment_id):
     
     if appointment and new_status.lower() in ("approved", "denied"):
         client = db.clients.find_one({"_id": appointment["user_id"]})
-        account = db.tbl_accounts.find_one({"_id": client["account_id"]}) if client else None
+        account = db.accounts.find_one({"_id": client["account_id"]}) if client else None
         if account:
             send_appointment_status_email(
                 email=account["email"],
@@ -272,8 +272,8 @@ def get_feedback_admin():
     }
     sort_order = sort_map.get(sort, [("date_submitted", -1)])
     
-    total = db.tbl_feedback.count_documents(query)
-    feedback = list(db.tbl_feedback.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
+    total = db.feedback.count_documents(query)
+    feedback = list(db.feedback.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
     for f in feedback:
         f["id"] = str(f["_id"])
         f["reply"] = f.get("reply", "")
@@ -293,7 +293,7 @@ def admin_reply_feedback(feedback_id):
         return jsonify({"message": "Reply cannot be empty."}), 400
     
     db = get_db()
-    feedback = db.tbl_feedback.find_one_and_update(
+    feedback = db.feedback.find_one_and_update(
         {"_id": ObjectId(feedback_id)},
         {"$set": {"reply": reply, "resolved": True}},
         return_document=True
@@ -305,7 +305,7 @@ def admin_reply_feedback(feedback_id):
     if send_email:
         client = db.clients.find_one({"account_id": feedback["account_id"]})
         if client:
-            account = db.tbl_accounts.find_one({"_id": client["account_id"]})
+            account = db.accounts.find_one({"_id": client["account_id"]})
             if account:
                 send_feedback_reply_email(account["email"], feedback["username"], reply)
     
@@ -320,7 +320,7 @@ def toggle_feedback_resolved(feedback_id):
     resolved_status = bool(data.get("resolved", False))
     
     db = get_db()
-    result = db.tbl_feedback.update_one({"_id": ObjectId(feedback_id)}, {"$set": {"resolved": resolved_status}})
+    result = db.feedback.update_one({"_id": ObjectId(feedback_id)}, {"$set": {"resolved": resolved_status}})
     
     if result.matched_count == 0:
         return jsonify({"message": "Feedback not found."}), 404
