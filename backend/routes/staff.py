@@ -59,11 +59,13 @@ def get_staff_by_service(service):
         return jsonify([]), 200
 
     try:
-        staff_list = list(staff_col.find({"specialization": role}, {"fullname": 1}))
-        # Convert ObjectId to string
-        for staff in staff_list:
-            staff["id"] = str(staff["_id"])
-            del staff["_id"]
+        cursor = staff_col.find({"specialization": role}, {"_id": 1, "fullname": 1})
+        staff_list = []
+        for doc in cursor:
+            staff_list.append({
+                "id": str(doc.get("_id")),
+                "fullname": doc.get("fullname", "")
+            })
 
         return jsonify(staff_list), 200
     except Exception as e:
