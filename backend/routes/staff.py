@@ -20,10 +20,32 @@ def add_unavailability():
     from flask import make_response
     if request.method == "OPTIONS":
         return make_response(('', 200))
-    data = request.get_json()
-    staff_id = data.get("staff_id")
-    unavailable_date = data.get("unavailable_date")
-    unavailable_times = data.get("unavailable_times", [])
+    data = request.get_json(silent=True) or {}
+
+    # Accept multiple key styles from frontend
+    staff_id = data.get("staff_id") or data.get("staffId") or data.get("staff")
+    unavailable_date = (
+        data.get("unavailable_date")
+        or data.get("date")
+        or data.get("unavailableDate")
+    )
+    unavailable_times = (
+        data.get("unavailable_times")
+        or data.get("times")
+        or data.get("unavailableTimes")
+        or []
+    )
+    # Normalize times payload if it arrived as a string
+    if isinstance(unavailable_times, str):
+        try:
+            import json as _json
+            parsed = _json.loads(unavailable_times)
+            if isinstance(parsed, list):
+                unavailable_times = parsed
+            else:
+                unavailable_times = [str(parsed)]
+        except Exception:
+            unavailable_times = [t.strip() for t in unavailable_times.split(',') if t.strip()]
 
     if not staff_id or not unavailable_date or not unavailable_times:
         return jsonify({"error": "Missing required fields"}), 400
