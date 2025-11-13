@@ -63,12 +63,45 @@ def appointments_summary():
 def monthly_report():
     db = get_db()
     now = datetime.now()
-    
+
+    start_of_month = datetime(now.year, now.month, 1)
+    if now.month == 12:
+        next_month = datetime(now.year + 1, 1, 1)
+    else:
+        next_month = datetime(now.year, now.month + 1, 1)
+
+    month_prefix = start_of_month.strftime("%Y-%m")
+
     pipeline = [
-        {"$match": {
-            "appointment_date": {"$gte": datetime(now.year, now.month, 1), "$lt": datetime(now.year, now.month + 1, 1)}
-        }},
-        {"$group": {"_id": "$service", "count": {"$sum": 1}}}
+        {
+            "$match": {
+                "$or": [
+                    {
+                        "$expr": {
+                            "$and": [
+                                {"$eq": [{"$type": "$appointment_date"}, "date"]},
+                                {"$gte": ["$appointment_date", start_of_month]},
+                                {"$lt": ["$appointment_date", next_month]},
+                            ]
+                        }
+                    },
+                    {
+                        "$expr": {
+                            "$and": [
+                                {"$eq": [{"$type": "$appointment_date"}, "string"]},
+                                {
+                                    "$regexMatch": {
+                                        "input": "$appointment_date",
+                                        "regex": f"^{month_prefix}"
+                                    }
+                                },
+                            ]
+                        }
+                    },
+                ]
+            }
+        },
+        {"$group": {"_id": {"$toLower": {"$ifNull": ["$service", ""]}}, "count": {"$sum": 1}}},
     ]
     rows = list(db.appointments.aggregate(pipeline))
     
