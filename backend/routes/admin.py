@@ -288,7 +288,37 @@ def get_feedback_admin():
     
     total = db.feedback.count_documents(query)
     feedback = list(db.feedback.find(query).sort(sort_order).skip((page-1)*per_page).limit(per_page))
+
+    # Preload account + client names so user column is always populated
+    account_ids = list({f["account_id"] for f in feedback if isinstance(f.get("account_id"), ObjectId)})
+    account_map = {}
+    client_map = {}
+    if account_ids:
+        account_docs = db.tbl_accounts.find({"_id": {"$in": account_ids}}, {"fullname": 1, "username": 1})
+        account_map = {
+            str(doc["_id"]): {
+                "fullname": doc.get("fullname", "") or "",
+                "username": doc.get("username", "") or "",
+            }
+            for doc in account_docs
+        }
+        client_docs = db.clients.find({"account_id": {"$in": account_ids}}, {"account_id": 1, "fullname": 1})
+        client_map = {
+            str(doc["account_id"]): doc.get("fullname", "") or ""
+            for doc in client_docs
+        }
+
     for f in feedback:
+        account_id = f.get("account_id")
+        account_key = str(account_id) if account_id is not None else None
+        account_info = account_map.get(account_key, {})
+        client_fullname = client_map.get(account_key, "")
+        username = f.get("username") or account_info.get("username") or ""
+        fullname = client_fullname or account_info.get("fullname") or ""
+
+        f["username"] = username
+        f["user_fullname"] = fullname
+        f["user"] = fullname or username
         f["id"] = str(f["_id"]) if f.get("_id") else None
         f["reply"] = f.get("reply", "")
         # Make nested types serializable
